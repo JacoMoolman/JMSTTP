@@ -44,7 +44,8 @@ def ensure_dependencies():
         ("wavio", "wavio"),
         ("scipy", "scipy"),
         ("pvporcupine", "pvporcupine"),
-        ("keyboard", "keyboard")
+        ("keyboard", "keyboard"),
+        ("webrtcvad", "webrtcvad")
     ]
 
     failed_installs = []
@@ -77,13 +78,16 @@ try:
     from scipy.io import wavfile
     import pvporcupine
     import keyboard
+    import webrtcvad
+    import struct
 except ImportError as e:
     print(f"Import error: {e}")
     print("There might be a package naming conflict or installation issue.")
     sys.exit(1)
 
 class WakeWordTranscriber:
-    def __init__(self, access_key, wake_word, recording_duration=5):
+    def __init__(self, access_key, wake_word, vad_aggressiveness=3,
+                 silence_duration=1.5, max_recording_duration=30):
         """
         Initialize with Porcupine access key.
         Get free key from: https://console.picovoice.ai/
@@ -91,6 +95,13 @@ class WakeWordTranscriber:
         Built-in keywords: alexa, americano, blueberry, bumblebee, computer,
         grapefruit, grasshopper, hey google, hey siri, jarvis, ok google,
         picovoice, porcupine, terminator
+
+        Args:
+            access_key: Porcupine access key
+            wake_word: Wake word to detect
+            vad_aggressiveness: VAD aggressiveness (0-3, 3 is most aggressive)
+            silence_duration: Seconds of silence before stopping recording
+            max_recording_duration: Maximum recording time in seconds
         """
         print("Loading Whisper model...")
         self.model = whisper.load_model("base")
@@ -109,18 +120,30 @@ class WakeWordTranscriber:
             print("2. Are using a valid built-in keyword")
             raise
 
+        # Initialize VAD
+        print("Initializing Voice Activity Detection...")
+        self.vad = webrtcvad.Vad(vad_aggressiveness)
+
         self.wake_word = wake_word
-        self.recording_duration = recording_duration
+        self.silence_duration = silence_duration
+        self.max_recording_duration = max_recording_duration
         self.sample_rate = 16000
         self.porcupine_sample_rate = self.porcupine.sample_rate
         self.frame_length = self.porcupine.frame_length
         self.wav_filename = "latest_recording.wav"
         self.running = True
 
-    def record_audio_for_duration(self, duration):
-        """Record audio for a specific duration."""
-        print(f"🎤 Recording for {duration} seconds...")
+        # VAD frame duration in ms (10, 20, or 30ms are valid for webrtcvad)
+        self.vad_frame_duration_ms = 30
+        self.vad_frame_size = int(self.sample_rate * self.vad_frame_duration_ms / 1000)
+
+    def record_audio_with_vad(self):
+        """Record audio and automatically stop when speech ends."""
+        print(f"🎤 Recording... (will auto-stop after {self.silence_duration}s of silence)")
         audio_data = []
+        is_speech_detected = False
+        silence_start = None
+        recording_start = time.time()
 
         def callback(indata, frames, time_info, status):
             if status:
@@ -131,7 +154,49 @@ class WakeWordTranscriber:
                           channels=1,
                           samplerate=self.sample_rate,
                           dtype=np.float32):
-            time.sleep(duration)
+
+            while True:
+                current_time = time.time()
+                elapsed = current_time - recording_start
+
+                # Check if we've exceeded max recording duration
+                if elapsed > self.max_recording_duration:
+                    print(f"\n⏱️  Maximum recording duration ({self.max_recording_duration}s) reached")
+                    break
+
+                # Wait until we have enough audio data for VAD analysis
+                time.sleep(0.1)
+
+                if len(audio_data) < self.vad_frame_size:
+                    continue
+
+                # Get the most recent frame for VAD
+                recent_audio = np.array(audio_data[-self.vad_frame_size:], dtype=np.float32)
+
+                # Convert float32 to int16 for VAD
+                int16_audio = (recent_audio * 32767).astype(np.int16)
+                audio_bytes = struct.pack(f'{len(int16_audio)}h', *int16_audio)
+
+                # Check if current frame contains speech
+                try:
+                    is_speech = self.vad.is_speech(audio_bytes, self.sample_rate)
+                except Exception as e:
+                    # If VAD fails, assume it's speech to continue recording
+                    is_speech = True
+
+                if is_speech:
+                    if not is_speech_detected:
+                        print("🗣️  Speech detected!")
+                        is_speech_detected = True
+                    silence_start = None  # Reset silence timer
+                else:
+                    # Only start counting silence after we've detected speech
+                    if is_speech_detected:
+                        if silence_start is None:
+                            silence_start = current_time
+                        elif current_time - silence_start >= self.silence_duration:
+                            print(f"\n🤫 {self.silence_duration}s of silence detected, stopping recording")
+                            break
 
         return np.array(audio_data, dtype=np.float32)
 
@@ -173,7 +238,8 @@ class WakeWordTranscriber:
         """Continuously listen for wake word."""
         print(f"\n{'='*60}")
         print(f"👂 Listening for wake word: '{self.wake_word}'")
-        print(f"After detection, will record for {self.recording_duration} seconds")
+        print(f"Will auto-stop recording after {self.silence_duration}s of silence")
+        print(f"Maximum recording duration: {self.max_recording_duration}s")
         print("Press Esc to quit")
         print(f"{'='*60}\n")
 
@@ -215,8 +281,8 @@ class WakeWordTranscriber:
                     if keyword_index >= 0:
                         print(f"\n✅ Wake word '{self.wake_word}' detected!")
 
-                        # Record audio
-                        audio_data = self.record_audio_for_duration(self.recording_duration)
+                        # Record audio with VAD
+                        audio_data = self.record_audio_with_vad()
 
                         # Transcribe
                         text = self.transcribe_audio(audio_data)
@@ -252,7 +318,11 @@ def main():
 
     # Configuration
     WAKE_WORD = "computer"  # Change to: alexa, computer, jarvis, hey google, etc.
-    RECORDING_DURATION = 5  # Seconds to record after wake word
+
+    # Voice Activity Detection settings
+    VAD_AGGRESSIVENESS = 3  # 0-3, higher = more aggressive in filtering non-speech
+    SILENCE_DURATION = 1.5  # Seconds of silence before auto-stopping
+    MAX_RECORDING_DURATION = 30  # Maximum recording time in seconds
 
     if ACCESS_KEY == "YOUR_ACCESS_KEY_HERE":
         print("❌ ERROR: Please set your Porcupine access key!")
@@ -265,7 +335,9 @@ def main():
         transcriber = WakeWordTranscriber(
             access_key=ACCESS_KEY,
             wake_word=WAKE_WORD,
-            recording_duration=RECORDING_DURATION
+            vad_aggressiveness=VAD_AGGRESSIVENESS,
+            silence_duration=SILENCE_DURATION,
+            max_recording_duration=MAX_RECORDING_DURATION
         )
         transcriber.listen_for_wake_word()
     except Exception as e:
