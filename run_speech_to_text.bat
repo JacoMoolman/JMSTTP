@@ -1,2 +1,2 @@
 @echo off
-python -u "e:\Projects\STT\speech_to_text.py"
+python -u "G:\Projects\JMSTTP\speech_to_text.py"

@@ -1,18 +1,93 @@
-import keyboard
-import sounddevice as sd
-import numpy as np
-import whisper
-import pyperclip
-import wavio
-import tempfile
+import subprocess
+import sys
+import importlib.util
 import os
-from threading import Thread
-import time
-from scipy.io import wavfile
+
+def install_package(package_name, import_name=None):
+    """Install a package using pip if it's not already installed."""
+    if import_name is None:
+        import_name = package_name
+    
+    # Check if package is already installed
+    if importlib.util.find_spec(import_name) is not None:
+        return True
+    
+    print(f"Installing {package_name}...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"Successfully installed {package_name}")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to install {package_name}: {e}")
+        return False
+
+def check_whisper_conflict():
+    """Check for whisper.py file conflicts in current directory."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    whisper_py = os.path.join(current_dir, 'whisper.py')
+    
+    if os.path.exists(whisper_py):
+        print(f"ERROR: Found conflicting file: {whisper_py}")
+        print("This file is interfering with the OpenAI Whisper import.")
+        print("Please rename or remove the whisper.py file in your current directory.")
+        return False
+    return True
+
+def ensure_dependencies():
+    """Ensure all required dependencies are installed."""
+    dependencies = [
+        ("keyboard", "keyboard"),
+        ("sounddevice", "sounddevice"),
+        ("numpy", "numpy"),
+        ("openai-whisper", "whisper"),
+        ("pyperclip", "pyperclip"),
+        ("wavio", "wavio"),
+        ("scipy", "scipy")
+    ]
+    
+    failed_installs = []
+    for package_name, import_name in dependencies:
+        if not install_package(package_name, import_name):
+            failed_installs.append(package_name)
+    
+    if failed_installs:
+        print(f"Failed to install the following packages: {', '.join(failed_installs)}")
+        print("Please install them manually using: pip install " + " ".join(failed_installs))
+        return False
+    
+    return True
+
+# Check for file conflicts first
+if not check_whisper_conflict():
+    sys.exit(1)
+
+# Ensure dependencies are installed before importing
+if not ensure_dependencies():
+    sys.exit(1)
+
+# Now import the remaining required modules
+try:
+    import keyboard
+    import sounddevice as sd
+    import numpy as np
+    import whisper
+    import pyperclip
+    import wavio
+    import tempfile
+    from threading import Thread
+    import time
+    from scipy.io import wavfile
+except ImportError as e:
+    print(f"Import error: {e}")
+    print("There might be a package naming conflict or installation issue.")
+    print("Try running: pip uninstall whisper && pip install openai-whisper")
+    sys.exit(1)
 
 class SpeechToTextTranscriber:
     def __init__(self):
+        print("Loading Whisper model...")
         self.model = whisper.load_model("base")
+        print("Model loaded successfully!")
         self.recording = False
         self.audio_data = []
         self.sample_rate = 16000  # Whisper expects 16kHz
@@ -33,7 +108,7 @@ class SpeechToTextTranscriber:
                               channels=1, 
                               samplerate=self.sample_rate,
                               dtype=np.float32):
-                print("Recording... Press Ctrl+Home again to stop.")
+                print("Recording... Press Ctrl+\" again to stop.")
                 while self.recording:
                     time.sleep(0.1)
         except Exception as e:
@@ -79,7 +154,14 @@ class SpeechToTextTranscriber:
             return ""
 
 def main():
-    transcriber = SpeechToTextTranscriber()
+    print("Initializing Speech-to-Text Transcriber...")
+    try:
+        transcriber = SpeechToTextTranscriber()
+    except Exception as e:
+        print(f"Failed to initialize transcriber: {e}")
+        print("Make sure you have a working microphone and audio drivers installed.")
+        return
+    
     recording_thread = None
     
     def on_hotkey():
@@ -108,14 +190,25 @@ def main():
             else:
                 print("No text was transcribed")
 
-    # Register the hotkey (Ctrl+Home)
-    keyboard.add_hotkey('ctrl+home', on_hotkey)
-    print("Speech-to-Text is running! Press Ctrl+Home to start/stop recording.")
+    # Register the hotkey (Ctrl+")
+    keyboard.add_hotkey('ctrl+"', on_hotkey)
+    print("\n" + "="*50)
+    print("Speech-to-Text is running!")
+    print("Press Ctrl+\" to start/stop recording.")
     print("Press Esc to quit the program.")
-    
+    print("="*50)
     
     # Keep the program running
-    keyboard.wait('esc')
+    try:
+        keyboard.wait('esc')
+    except KeyboardInterrupt:
+        print("\nProgram interrupted by user.")
+    finally:
+        print("Cleaning up...")
+        if transcriber.recording:
+            transcriber.stop_recording()
+        if recording_thread and recording_thread.is_alive():
+            recording_thread.join()
 
 if __name__ == "__main__":
     main()
