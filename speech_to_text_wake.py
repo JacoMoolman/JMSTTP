@@ -178,6 +178,7 @@ class WakeWordTranscriber:
         print(f"{'='*60}\n")
 
         audio_buffer = []
+        frame_count = 0
 
         def callback(indata, frames, time_info, status):
             if status:
@@ -187,16 +188,26 @@ class WakeWordTranscriber:
             audio_buffer.extend(int16_data)
 
         try:
+            print("DEBUG: About to open audio stream...")
             with sd.InputStream(callback=callback,
                               channels=1,
                               samplerate=self.porcupine_sample_rate,
                               dtype=np.float32):
+                print("DEBUG: Audio stream opened!")
+                print(f"DEBUG: Sample rate: {self.porcupine_sample_rate}, Frame length: {self.frame_length}")
+                print("DEBUG: Entering main loop...\n")
+
                 while self.running:
-                    # Check for Esc key
-                    if keyboard.is_pressed('esc'):
-                        print("\nExiting...")
-                        self.running = False
-                        break
+                    # Check for Esc key with try/except to catch any issues
+                    try:
+                        if keyboard.is_pressed('esc'):
+                            print("\nDEBUG: Escape key detected")
+                            print("\nExiting...")
+                            self.running = False
+                            break
+                    except Exception as e:
+                        print(f"DEBUG: Error checking keyboard: {e}")
+                        # Continue anyway - don't exit
 
                     # Wait until we have enough frames
                     while len(audio_buffer) < self.frame_length and self.running:
@@ -208,6 +219,13 @@ class WakeWordTranscriber:
                     # Get frame for Porcupine
                     frame = audio_buffer[:self.frame_length]
                     audio_buffer = audio_buffer[self.frame_length:]
+
+                    # Debug: Show we're processing frames
+                    frame_count += 1
+                    if frame_count == 1:
+                        print(f"DEBUG: Processing first frame!")
+                    if frame_count % 100 == 0:
+                        print(f"DEBUG: Processed {frame_count} frames - still listening...")
 
                     # Check for wake word
                     keyword_index = self.porcupine.process(frame)
