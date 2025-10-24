@@ -44,8 +44,7 @@ def ensure_dependencies():
         ("wavio", "wavio"),
         ("scipy", "scipy"),
         ("pvporcupine", "pvporcupine"),
-        ("keyboard", "keyboard"),
-        ("webrtcvad", "webrtcvad")
+        ("keyboard", "keyboard")
     ]
 
     failed_installs = []
@@ -78,15 +77,13 @@ try:
     from scipy.io import wavfile
     import pvporcupine
     import keyboard
-    import webrtcvad
-    import struct
 except ImportError as e:
     print(f"Import error: {e}")
     print("There might be a package naming conflict or installation issue.")
     sys.exit(1)
 
 class WakeWordTranscriber:
-    def __init__(self, access_key, wake_word, vad_aggressiveness=3,
+    def __init__(self, access_key, wake_word, energy_threshold=0.02,
                  silence_duration=1.5, max_recording_duration=30):
         """
         Initialize with Porcupine access key.
@@ -99,7 +96,7 @@ class WakeWordTranscriber:
         Args:
             access_key: Porcupine access key
             wake_word: Wake word to detect
-            vad_aggressiveness: VAD aggressiveness (0-3, 3 is most aggressive)
+            energy_threshold: Energy level threshold for speech detection (0.01-0.1)
             silence_duration: Seconds of silence before stopping recording
             max_recording_duration: Maximum recording time in seconds
         """
@@ -120,11 +117,10 @@ class WakeWordTranscriber:
             print("2. Are using a valid built-in keyword")
             raise
 
-        # Initialize VAD
-        print("Initializing Voice Activity Detection...")
-        self.vad = webrtcvad.Vad(vad_aggressiveness)
+        print("Initializing Voice Activity Detection (Energy-based)...")
 
         self.wake_word = wake_word
+        self.energy_threshold = energy_threshold
         self.silence_duration = silence_duration
         self.max_recording_duration = max_recording_duration
         self.sample_rate = 16000
@@ -133,9 +129,18 @@ class WakeWordTranscriber:
         self.wav_filename = "latest_recording.wav"
         self.running = True
 
-        # VAD frame duration in ms (10, 20, or 30ms are valid for webrtcvad)
-        self.vad_frame_duration_ms = 30
+        # VAD frame size (100ms chunks for analysis)
+        self.vad_frame_duration_ms = 100
         self.vad_frame_size = int(self.sample_rate * self.vad_frame_duration_ms / 1000)
+
+    def calculate_energy(self, audio_frame):
+        """Calculate RMS energy of audio frame."""
+        return np.sqrt(np.mean(audio_frame ** 2))
+
+    def is_speech(self, audio_frame):
+        """Simple energy-based voice activity detection."""
+        energy = self.calculate_energy(audio_frame)
+        return energy > self.energy_threshold
 
     def record_audio_with_vad(self):
         """Record audio and automatically stop when speech ends."""
@@ -173,18 +178,10 @@ class WakeWordTranscriber:
                 # Get the most recent frame for VAD
                 recent_audio = np.array(audio_data[-self.vad_frame_size:], dtype=np.float32)
 
-                # Convert float32 to int16 for VAD
-                int16_audio = (recent_audio * 32767).astype(np.int16)
-                audio_bytes = struct.pack(f'{len(int16_audio)}h', *int16_audio)
+                # Check if current frame contains speech using energy-based VAD
+                speech_detected = self.is_speech(recent_audio)
 
-                # Check if current frame contains speech
-                try:
-                    is_speech = self.vad.is_speech(audio_bytes, self.sample_rate)
-                except Exception as e:
-                    # If VAD fails, assume it's speech to continue recording
-                    is_speech = True
-
-                if is_speech:
+                if speech_detected:
                     if not is_speech_detected:
                         print("🗣️  Speech detected!")
                         is_speech_detected = True
@@ -319,8 +316,8 @@ def main():
     # Configuration
     WAKE_WORD = "computer"  # Change to: alexa, computer, jarvis, hey google, etc.
 
-    # Voice Activity Detection settings
-    VAD_AGGRESSIVENESS = 3  # 0-3, higher = more aggressive in filtering non-speech
+    # Voice Activity Detection settings (Energy-based)
+    ENERGY_THRESHOLD = 0.02  # 0.01-0.1, lower = more sensitive (detects quieter speech)
     SILENCE_DURATION = 1.5  # Seconds of silence before auto-stopping
     MAX_RECORDING_DURATION = 30  # Maximum recording time in seconds
 
@@ -335,7 +332,7 @@ def main():
         transcriber = WakeWordTranscriber(
             access_key=ACCESS_KEY,
             wake_word=WAKE_WORD,
-            vad_aggressiveness=VAD_AGGRESSIVENESS,
+            energy_threshold=ENERGY_THRESHOLD,
             silence_duration=SILENCE_DURATION,
             max_recording_duration=MAX_RECORDING_DURATION
         )
