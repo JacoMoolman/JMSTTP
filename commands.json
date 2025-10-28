@@ -1,0 +1,102 @@
+{
+  "commands": [
+    {
+      "type": "process",
+      "keywords": ["open notepad", "open note pad", "notepad", "note pad"],
+      "command": "notepad.exe",
+      "args": [],
+      "working_dir": null,
+      "description": "Opens Notepad"
+    },
+    {
+      "type": "process",
+      "keywords": ["open calculator", "open calc", "calculator", "calc"],
+      "command": "calc.exe",
+      "args": [],
+      "working_dir": null,
+      "description": "Opens Calculator"
+    },
+    {
+      "type": "process",
+      "keywords": ["open chrome", "open google chrome", "chrome"],
+      "command": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "args": [],
+      "working_dir": null,
+      "description": "Opens Google Chrome"
+    },
+    {
+      "type": "process",
+      "keywords": ["shutdown computer", "shut down computer", "shutdown", "shut down"],
+      "command": "shutdown",
+      "args": ["/s", "/t", "30"],
+      "working_dir": null,
+      "description": "Shuts down the computer in 30 seconds"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["save", "save file", "save document"],
+      "shortcut": "ctrl+s",
+      "description": "Save (Ctrl+S)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["copy", "copy text"],
+      "shortcut": "ctrl+c",
+      "description": "Copy (Ctrl+C)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["paste", "paste text"],
+      "shortcut": "ctrl+v",
+      "description": "Paste (Ctrl+V)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["undo", "undo that"],
+      "shortcut": "ctrl+z",
+      "description": "Undo (Ctrl+Z)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["redo", "redo that"],
+      "shortcut": "ctrl+y",
+      "description": "Redo (Ctrl+Y)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["select all", "select everything"],
+      "shortcut": "ctrl+a",
+      "description": "Select All (Ctrl+A)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["find", "search", "find text"],
+      "shortcut": "ctrl+f",
+      "description": "Find (Ctrl+F)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["new tab", "open new tab"],
+      "shortcut": "ctrl+t",
+      "description": "New Tab (Ctrl+T)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["close tab", "close window"],
+      "shortcut": "ctrl+w",
+      "description": "Close Tab/Window (Ctrl+W)"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["delete", "delete text", "delete that"],
+      "shortcut": "delete",
+      "description": "Delete"
+    },
+    {
+      "type": "keyboard",
+      "keywords": ["enter", "press enter", "new line"],
+      "shortcut": "enter",
+      "description": "Enter"
+    }
+  ]
+}
