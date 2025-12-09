@@ -1,7 +1,21 @@
-import subprocess
-import sys
+# Standard library imports
 import importlib.util
 import os
+import subprocess
+import sys
+import tempfile
+import time
+from threading import Thread
+
+# Third-party imports (imported after dependency check)
+keyboard = None
+sd = None
+np = None
+whisper = None
+pyperclip = None
+wavio = None
+wavfile = None
+pygame = None
 
 def install_package(package_name, import_name=None):
     """Install a package using pip if it's not already installed."""
@@ -42,7 +56,8 @@ def ensure_dependencies():
         ("openai-whisper", "whisper"),
         ("pyperclip", "pyperclip"),
         ("wavio", "wavio"),
-        ("scipy", "scipy")
+        ("scipy", "scipy"),
+        ("pygame", "pygame")
     ]
     
     failed_installs = []
@@ -65,7 +80,7 @@ if not check_whisper_conflict():
 if not ensure_dependencies():
     sys.exit(1)
 
-# Now import the remaining required modules
+# Now import the third-party modules after dependency check
 try:
     import keyboard
     import sounddevice as sd
@@ -73,20 +88,41 @@ try:
     import whisper
     import pyperclip
     import wavio
-    import tempfile
-    from threading import Thread
-    import time
     from scipy.io import wavfile
+    import pygame
 except ImportError as e:
     print(f"Import error: {e}")
     print("There might be a package naming conflict or installation issue.")
     print("Try running: pip uninstall whisper && pip install openai-whisper")
     sys.exit(1)
 
+def play_mp3(mp3_file):
+    """Play an MP3 file with error handling (non-blocking)."""
+    try:
+        # Initialize pygame mixer if not already initialized
+        if not pygame.mixer.get_init():
+            pygame.mixer.init()
+        
+        # Get the full path to the MP3 file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        mp3_path = os.path.join(script_dir, mp3_file)
+        
+        # Check if file exists
+        if not os.path.exists(mp3_path):
+            print(f"Warning: Sound file not found: {mp3_path}")
+            return
+        
+        # Load and play the sound (non-blocking)
+        sound = pygame.mixer.Sound(mp3_path)
+        sound.play()
+    except Exception as e:
+        # If sound fails, don't break the main functionality
+        print(f"Sound notification failed: {e}")
+
 class SpeechToTextTranscriber:
     def __init__(self):
         print("Loading Whisper model...")
-        self.model = whisper.load_model("base")
+        self.model = whisper.load_model("small")
         print("Model loaded successfully!")
         self.recording = False
         self.audio_data = []
@@ -170,6 +206,7 @@ def main():
         if not transcriber.recording:
             # Start recording
             print("\nStarting new recording...")
+            play_mp3("menu-button-88360.mp3")  # Sound notification: recording started
             recording_thread = Thread(target=transcriber.record_audio)
             recording_thread.start()
         else:
@@ -177,6 +214,9 @@ def main():
             print("\nStopping recording...")
             transcriber.stop_recording()
             recording_thread.join()
+            
+            # Play sound to indicate processing has started
+            play_mp3("ui_sci-fi-sound-36061.mp3")  # Sound notification: processing begins
             
             # Get transcription and copy to clipboard
             print("Transcribing audio...")
